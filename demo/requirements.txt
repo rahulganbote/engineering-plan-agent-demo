@@ -1,0 +1,5 @@
+# No external dependencies required for the demo.
+# The mock pipeline runs on Python 3.9+ standard library only.
+#
+# If you want to run the real system (private repo), additional
+# dependencies apply. Contact the author for details.

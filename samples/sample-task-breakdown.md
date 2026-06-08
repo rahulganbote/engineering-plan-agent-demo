@@ -1,0 +1,122 @@
+# Task Breakdown: Real-Time Notification System
+
+**Source Plan:** Engineering Plan v1.0  
+**Generated:** 2024-11-16  
+**Phase:** 1 (Q1 scope only)  
+
+Tasks are sized using T-shirt sizing: S = 1–2 days, M = 3–5 days, L = 1–2 weeks, XL = 2+ weeks.
+
+---
+
+## M1 — WebSocket Infrastructure and Real-Time Delivery
+
+### Backend
+
+| Task ID | Title | Size | Depends On | Notes |
+|---|---|---|---|---|
+| T-001 | Define WebSocket connection lifecycle spec (connect, heartbeat, reconnect, disconnect) | S | — | Must be reviewed by infra before implementation |
+| T-002 | Implement JWT authentication at WebSocket handshake | S | T-001 | Reuse existing auth middleware |
+| T-003 | Implement WebSocket connection manager (single node) | M | T-001, T-002 | Single-node first; horizontal scaling in T-005 |
+| T-004 | Design notification routing schema (user → connection mapping) | S | T-003 | Must handle multiple tabs per user |
+| T-005 | Implement horizontal scaling for WebSocket connections (Redis pub/sub or equivalent) | L | T-003, T-004 | Critical path for NFR-001; architecture review needed |
+| T-006 | Build internal notification dispatch API (event bus → WebSocket delivery) | M | T-005 | Kafka consumer integration |
+| T-007 | Implement rate limiting at delivery layer | S | T-006 | Threshold TBD pending OQ-3 |
+| T-008 | Write unit tests for connection manager and dispatch | M | T-003, T-006 | Target 80% coverage |
+
+### Infra
+
+| Task ID | Title | Size | Depends On | Notes |
+|---|---|---|---|---|
+| T-009 | Audit load balancer for WebSocket support; provision or reconfigure | M | — | Start immediately; may be blocker |
+| T-010 | Establish connection baseline metrics (Grafana/Datadog) | S | T-009 | Needed before load testing |
+| T-011 | Load test at 10k concurrent connections | M | T-005, T-010 | Gate: must pass before T-012 |
+| T-012 | Load test at 50k concurrent connections | M | T-011 | Go/no-go gate at week 6 |
+
+### QA
+
+| Task ID | Title | Size | Depends On | Notes |
+|---|---|---|---|---|
+| T-013 | Performance baseline: LCP and TTI on key pages before M1 | S | — | Must run before any M1 code ships |
+| T-014 | Performance regression test suite for M1 | M | T-013, T-008 | Automated; run in CI |
+| T-015 | Security test: cross-user notification delivery (must be zero) | M | T-006 | P0 test case — no ship without pass |
+
+---
+
+## M2 — Notification Preference Service
+
+### Backend
+
+| Task ID | Title | Size | Depends On | Notes |
+|---|---|---|---|---|
+| T-016 | Design preference data model (user, type, state, digest config) | S | — | Blocked on OQ-4 for digest frequency field |
+| T-017 | Implement preference storage (CRUD API) | M | T-016 | |
+| T-018 | Implement preference enforcement in dispatch layer | M | T-017, T-006 | Filters notifications before WebSocket send |
+| T-019 | Implement digest scheduler (batched preference mode) | L | T-017 | Blocked on OQ-4; scope TBD |
+| T-020 | Write unit + integration tests for preference service | M | T-017, T-018 | |
+
+### Frontend
+
+| Task ID | Title | Size | Depends On | Notes |
+|---|---|---|---|---|
+| T-021 | Design preference settings UI (with design lead) | S | — | Should run in parallel with backend |
+| T-022 | Implement notification preferences settings page | M | T-021, T-017 | |
+| T-023 | Implement preference persistence across sessions | S | T-022 | Confirm approach: server-side vs. local storage |
+
+---
+
+## M3 — Notification Badge Counts (Real-Time)
+
+### Frontend
+
+| Task ID | Title | Size | Depends On | Notes |
+|---|---|---|---|---|
+| T-024 | Implement badge count component in navigation | S | — | UI only; mock data initially |
+| T-025 | Connect badge count to WebSocket unread count events | S | T-024, T-003 | Depends on M1 WebSocket connection |
+| T-026 | Handle badge count reset on notification view | S | T-025 | |
+| T-027 | Cross-tab badge count sync (multiple open tabs) | M | T-025 | BroadcastChannel API or server-side |
+
+### QA
+
+| Task ID | Title | Size | Depends On | Notes |
+|---|---|---|---|---|
+| T-028 | E2E test: badge count updates within 2 seconds of trigger | M | T-025 | Automated in CI |
+
+---
+
+## Summary by Domain
+
+| Domain | Task Count | Total Size | Critical Path Tasks |
+|---|---|---|---|
+| Backend | 14 | ~XL | T-001 → T-005 → T-006 → T-018 |
+| Frontend | 7 | ~L | T-025 depends on M1 complete |
+| Infra | 4 | ~L | T-009 (start immediately) |
+| QA | 4 | ~M | T-013 (must run before M1 ships) |
+| **Total** | **29** | **~42 eng-days** | |
+
+---
+
+## Dependency Graph (Phase 1 Critical Path)
+
+```
+T-009 (Infra: load balancer)
+    │
+T-001 (WS lifecycle spec)
+    │
+T-002 (JWT auth at handshake) ──┐
+    │                           │
+T-003 (Connection manager)  ────┘
+    │
+T-004 (Routing schema)
+    │
+T-005 (Horizontal scaling)   ← CRITICAL PATH
+    │
+T-006 (Dispatch API)
+    │
+T-007 (Rate limiting)    T-018 (Preference enforcement)
+    │                         │
+T-011 → T-012 (Load tests)   T-025 (Badge counts via WS)
+```
+
+---
+
+*Generated by EM Copilot. Critic badge: 🟢 GREEN (4.33/5.00). Human HITL approval required before sprint assignment.*
