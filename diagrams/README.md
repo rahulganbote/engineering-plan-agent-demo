@@ -26,7 +26,7 @@ Node names shown (`node_orchestrator_hub`, `node_dispatch_specialists`, etc.) ar
 ```
                          ┌─────────────────────────────────────────────────┐
                          │         SECURITY VALIDATION LAYER               │
-BRD Upload ──► FastAP ──►│  File check → Parse → Injection Guard (regex)   │
+BRD Upload ──► FastAPI──►│  File check → Parse → Injection Guard (regex)   │
 (Streamlit)     POST     │  → Injection Guard (LLM) → PII Redact → BRD ✓   │
             run-pipeline └─────────────────────────────────────────────────┘
                                               │ validated BRD text

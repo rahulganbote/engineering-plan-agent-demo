@@ -151,7 +151,27 @@ See [screenshots/README.md](screenshots/README.md) for full annotations on each.
 
 ---
 
+## Tech Stack & Justifications
+
+| Category | Technology | Engineering Reason |
+|---|---|---|
+| **Agent State** | LangGraph v0.2.28 | State Graph model with native routing, cycle tracking, and async interrupts |
+| **Vector DB** | Pinecone Serverless | Fully managed index with fast cosine-similarity search over technical standards |
+| **Embeddings** | `text-embedding-3-large` (1024) | High dimensionality with customized text projection for dense architectural guides |
+| **Models** | GPT-4o (specialists) + GPT-4o-mini (critic) | Balance between specialist reasoning quality and critic execution cost |
+| **Web Server** | FastAPI | Async endpoints, Server-Sent Events (SSE) for UI streaming, and non-blocking exports |
+| **Frontend UI** | Streamlit | Rapid UI prototyping displaying real-time execution graphs and progress logs |
+| **Voice Interface** | ElevenLabs Conversational AI | Webhook integration executing natural language HITL discussion & approvals |
+| **Tool Integration** | Model Context Protocol (MCP) | Standardized Agent-to-Tool transport; the Jira Epic push runs through an `mcp-atlassian` server spawned over stdio |
+| **Resilience Primitives** | Custom `src/core/resilience.py` (mirrors Hystrix / Polly / resilience4j) | Small surface area, no external dependency; per-instance state with frozen `CallPolicy` |
+| **Cache Backends** | `InMemoryCache` / `RedisCache` / `TieredCache` / `SemanticBackend` (Pinecone) | Pluggable `CacheBackend` Protocol — chosen at runtime via `init_default_backend_from_env()` |
+| **Event Bus** | Lightweight `src/core/events.py` emitter | Best-effort event fan-out for `cache_hit`, `cache_miss`, `retry`, `breaker_open`, `bulkhead_timeout`; surfaced into Streamlit SSE stream |
+
+---
+
 ## Repo Structure
+
+To navigate this public demo repository, here is the layout of the system design documents, sample outputs, and simulated execution scripts:
 
 ```
 engineering-plan-agent-demo/
@@ -197,12 +217,6 @@ python demo/sanitized_example.py --json     # raw JSON output
 ```
 
 No API keys required. The demo runs the pipeline structure over mock data.
-
----
-
-## Tech Stack
-
-LangGraph · GPT-4o · GPT-4o-mini · Pinecone · LangSmith · FastAPI · Streamlit · ElevenLabs · Jira MCP (mcp-atlassian) · Google Sheets (gspread) · ReportLab · Kroki · Pydantic · BERTScore · Tenacity · Slack
 
 ---
 
