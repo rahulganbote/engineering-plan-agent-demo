@@ -9,7 +9,7 @@
 [![ElevenLabs](https://img.shields.io/badge/Voice%20HITL-ElevenLabs-1F1F1F)](https://elevenlabs.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> A demo of **EM Copilot**: a production-grade, 7-Agents LangGraph system, grounded with RAG that transforms a raw Business Requirements Document (BRD) into an draft of engineering package: Structured plan, Project schedule, Architecture diagram, PoC definition, and Tech Stack options. Outputs are evaluated by a Critic Agent after passing quality grade, downloadable as PDF, reviewed via a Human-in-the-Loop (HITL) gate supporting voice commands, and deployed to Jira Cloud, Dashboard in Google Sheets, and Slack alert.
+> A demo of **EM Copilot**: a production-grade, 7-agent LangGraph system, grounded with RAG, that transforms a raw Business Requirements Document (BRD) into a draft engineering package: structured plan, project schedule, architecture diagram, PoC definition, and tech stack options. Outputs are evaluated by a Critic Agent, downloadable as PDF, reviewed via a Human-in-the-Loop (HITL) gate supporting voice commands, and deployed to Jira Cloud, Google Sheets dashboards, and Slack alerts.
 
 🔗 **Live Demo:** [huggingface.co/spaces/rganbote/em-copilot](https://huggingface.co/spaces/rganbote/em-copilot)  
 
@@ -22,7 +22,7 @@ Engineering Managers face a persistent bottleneck translating complex BRDs into 
 - **Delivery delays**: Weeks spent drafting sprint scopes and mapping timelines
 - **Misalignment**: Gaps between business intent and engineering implementation
 - **Inconsistent scoping**: Ad-hoc architectures and planning criteria varying across squads
-- **Org specific Tech stack**: Exploring tech stack to, what is allowed or available vs not support in your org level infrastructure
+- **Org-specific tech stacks**: Evaluating technology stacks relative to what is supported and allowed vs unsupported at the organizational level
 
 ## The Solution
 
@@ -32,16 +32,16 @@ EM Copilot ingests a raw BRD and produces a complete, audit-ready engineering bu
 
 ## Engineering Highlights
 
-- **7-Agent LangGraph pipeline**: Hybrid Hub & Spoke design pattern. Parallel dispatch to specialist Agents, ~3× faster than sequential chaining (~50s vs >2.5 min)
-- **Pydantic-enforced output contracts**: At every agent boundary, zero untyped LLM handoffs
-- **Deterministic security layer** 7-check sequential pipeline (format, size, word count, regex injection guard, semantic injection guard, PII redaction, completeness check)
-- **Pinecone RAG**: Each specialist agent retrieves org-specific standards with citation tracking; Critic enforces that citations match valid vector chunks
-- **LLM-as-Judge Critic with 3 deterministic failure-mode caps**: Prevents the Critic from being overly optimistic; Hallucination guard, uncited claim cap, sentinel fallback cap
-- **Targeted revision loop**: Critic flags only the specialist agents that failed; only those re-run (max 2 cycles), not the full pipeline
-- **ElevenLabs Voice HITL Gate**: Conversational human approval accepting numeric ratings and natural language feedback via webhook
-- **Jira Epic via MCP**: uses `mcp-atlassian` MCP server (stdio transport) with automatic fallback to REST API; Epic description built in Atlassian Document Format (ADF)
-- **5-method evaluation framework**: Rule-based, LLM-as-Judge, execution/schema, BERTScore semantic diff, Human HITL ratings
-- **LangSmith full-trace observability**: Every model call, token count, prompt, and latency captured
+- **7-agent LangGraph pipeline**: Hybrid Hub-and-Spoke design pattern. Parallel dispatch to specialist agents is ~3× faster than sequential chaining (~50s vs >2.5 minutes).
+- **Pydantic-enforced output contracts**: Clean execution at every agent boundary with zero untyped LLM handoffs.
+- **Deterministic security layer**: A 7-step safety pipeline (format, size, word count, regex injection guard, semantic injection guard, PII redaction, completeness check) that runs before any LLM execution.
+- **Pinecone RAG**: Each specialist agent retrieves org-specific standards with citation tracking; the Critic enforces that citations match valid vector chunks.
+- **LLM-as-Judge Critic with 3 deterministic failure-mode caps**: Prevents the Critic from being overly optimistic (Hallucination guard, uncited claim cap, sentinel fallback cap).
+- **Targeted revision loop**: The Critic flags only the specialist agents that failed; only those nodes re-run (max 2 cycles), avoiding full graph replays.
+- **ElevenLabs Voice HITL Gate**: Conversational human approval accepting numeric ratings and natural language feedback via webhook.
+- **Jira Epic via MCP**: Uses the `mcp-atlassian` MCP server (stdio transport) with automatic fallback to REST API; constructs descriptions in Atlassian Document Format (ADF).
+- **5-method evaluation framework**: Rule-based, LLM-as-Judge, execution/schema validation, BERTScore semantic diffs, and Human HITL ratings.
+- **LangSmith full-trace observability**: Every model call, token count, prompt structure, and latency captured.
 
 ---
 
@@ -49,25 +49,25 @@ EM Copilot ingests a raw BRD and produces a complete, audit-ready engineering bu
 
 Building a production-grade Multi-Agent system surfaces problems that PoC demos may not.
 
-**1. Data strategy & Golden datasets**: Challenging to come up with Agent contracts. Needed thorough analysis on schemas & who consumes what. Output quality is only as good as your Golden dataset. Lesson: Create your domain specific and your org standard data. Define Pydantic for BRD structure at the org level. Define maintain versioning of a Golden dataset.
+**1. Data strategy & Golden datasets**: Designing agent contracts required thorough analysis of schemas and data consumers. Output quality is only as good as the Golden dataset. Lesson: Create domain-specific, org-standard data; define Pydantic models for BRD structures at the org level; and maintain active versioning of Golden datasets.
 
-**2. Modular vs. Functional design**: Vibe coding tends to miss extensibility. Refactoring in mid-project was expensive. Lesson: Give the AI your architectural vision and extensibility requirements explicitly for future scope of work, not just the task or feature spec.
+**2. Modular vs. Functional design**: Extensibility is easily missed. Mid-project refactoring is expensive. Lesson: Explicitly provide the AI with the overall architectural vision and extensibility requirements for future extensions, not just the task spec.
 
-**3. Reliable AI**: Less Bells and whistles but more reliable AI will give more adoption. Lesson: Early versions had more integrations but lower output reliability. Cutting scope to harden the Critic, Eval methods, and security layer produced a more reliable system.
+**3. Reliable AI**: Fewer bells and whistles and more reliable execution leads to higher adoption. Lesson: Cutting scope to harden the Critic, evaluation methods, and the security layer produced a far more reliable system.
 
-**4. Guardrails**: LLM judges are optimistic by default. Autonomous components need deterministic guardrails wrapped around them, not embedded inside them. The Critic was passing outputs it shouldn't have. Lesson: Added 4 deterministic rules e.g. BERTScore in Eval framework.
+**4. Guardrails**: LLM judges are optimistic by default. Autonomous components need deterministic guardrails wrapped *around* them, not embedded *inside* them. Lesson: Wrapped the LLM judge in deterministic evaluation rules (such as BERTScore).
 
-**5. Safety & Security**: Security check to prevent prompt ingestion; BRD validation for schema compliance. . Asking Agents to "cite sources" for grounding is not enough. The Critic must verify the citation maps to a real vector chunk key. Lesson: Design citation verification into the evaluation.
+**5. Safety & Security**: LLMs are susceptible to prompt injection and compliance issues. Asking agents to "cite sources" for grounding is not enough. Lesson: The Critic must verify that citations map back to real vector chunk keys.
 
-**6. Responsible AI**: Autonomous Agent requires mindset shift. Hallucation detection requires active enforcements & guardrails. But a LLM judge you can't deterministically override, is a liability rather than a feature. Lesson: Nothing exports without a human approval gate. Jira write upon approval.
+**6. Responsible AI**: Autonomous agents require a mindset shift. Hallucination detection requires active enforcement. Lesson: Nothing exports without a Human-in-the-Loop approval gate; Jira tickets are created only upon explicit human approval.
 
-**7. Observability from Day 1**: Silent failures or degradation due to drift likely to happen in Production. Monitoring the Drift, you should catch before customer. LangSmith was added mid-project and immediately surfaced latency issues and prompt failures that were invisible before. Lesson: LangSmith or cheaper telemetry is required from the begining. You can't fix what you can't see.
+**7. Observability from Day 1**: Silent failures are common in production agent systems. Lesson: Telemetry like LangSmith is mandatory from the beginning. You cannot debug or fix what you cannot trace.
 
-**8. Cost & Token usage**: The price you pay for that observability is real. LangSmith billing scales with traces, so a production deployment at scale would sample LangSmith for new releases and Red-flagged runs, while letting the existing JSONL logger handle the routine firehose.
+**8. Cost & Token usage**: Full-scale LangSmith monitoring is expensive. Lesson: A production architecture should sample traces for new releases or red-flagged runs, while letting local structured JSONL logs handle routine telemetry.
 
-**9. Latency is Product problem not just an engineering one**: 50 seconds felt fast during development. Users expect faster. Lessons: Optimize the whole orchestration/workflow. Cache Prompt and Output. Parallel dispatch was the biggest single win (~3× speedup).
+**9. Latency is a Product problem**: A 50-second wait time is fast for complex generation, but users expect immediate feedback. Lesson: Parallel dispatch via `ThreadPoolExecutor` yielded the biggest performance improvement (3× speedup).
 
-**10. Conversational AI & HITL**: ElevenLabs is easy to configure but getting the Voice AI Agent to correctly interpret artifact summaries required to pass structured context into the pipeline is harder. Lesson: budget more time for voice integration.
+**10. Conversational AI & HITL**: Getting voice assistants to interpret complex artifact summaries requires highly structured prompt context. Lesson: Budget extra development cycles for integrating voice-based human feedback.
 
 ---
 
@@ -113,15 +113,15 @@ See [screenshots/README.md](screenshots/README.md) for full annotations on each.
 
 ## Agent Inventory
 
-| Agent | Role | Pattern |
-|---|---|---|
-| **Orchestrator** | Parses BRD sections, routes to specialists | Hub-and-spoke dispatcher |
-| **Plan Generator** | Creates phased engineering plan with milestones | RAG + Reflection |
-| **Schedule Estimator** | Estimates effort, sprint timeline, dependencies | RAG + Timeline modeling |
-| **Solution Architect** | Generates Mermaid diagram rendered via Kroki | RAG + Diagram synthesis |
-| **PoC Planner** | Defines proof-of-concept scope and success metrics | RAG + Scoping |
-| **Tech Stack Recommender** | Evaluates technology options against org standards | RAG + Org standards |
-| **Critic Agent** | Quality auditing, revision loop control, Rule-based + BERTScore  | LLM-as-Judge |
+| Agent | Model | Role | Pattern |
+|---|---|---|---|
+| **Orchestrator** | GPT-4o-mini | Parses BRD sections, routes to specialists | Hub-and-spoke dispatcher |
+| **Plan Generator** | GPT-4o | Creates phased engineering plan with milestones | RAG + Reflection |
+| **Schedule Estimator** | GPT-4o | Estimates effort, sprint timeline, dependencies | RAG + Timeline modeling |
+| **Solution Architect** | GPT-4o | Generates Mermaid diagram rendered via Kroki | RAG + Diagram synthesis |
+| **PoC Planner** | GPT-4o | Defines proof-of-concept scope and success metrics | RAG + Scoping |
+| **Tech Stack Recommender** | GPT-4o | Evaluates technology options against org standards | RAG + Org standards |
+| **Critic Agent** | GPT-4o-mini | Quality auditing, revision loop control, Rule-based + BERTScore | LLM-as-Judge |
 
 ---
 
@@ -162,20 +162,25 @@ engineering-plan-agent-demo/
 │   ├── agent-roles.md               # Agent responsibilities and contracts
 │   └── security-and-sanitization.md # What's protected and why
 ├── diagrams/
-│   ├── README.md                    # Mermaid source for all diagrams
-│   ├── high-level-architecture.png
-│   └── multi-agent-flow.png
+│   ├── README.md                    # Mermaid source for diagrams
+│   └── architecture_hub_spoke.png   # Full system architecture diagram
 ├── screenshots/
-│   ├── input-brd.png
-│   ├── generated-plan.png
-│   └── review-output.png
+│   ├── README.md                    # Detailed annotations for screenshots
+│   ├── 01-streamlit-pipeline-green.png
+│   ├── 02-streamlit-artifacts-architecture.png
+│   ├── 03-hitl-voice-elevenlabs.png
+│   ├── 04-langsmith-trace-nodes.png
+│   ├── 05-langsmith-tracing-list.png
+│   ├── 06-langsmith-monitoring.png
+│   └── 07-langsmith-cost-tokens.png
 ├── samples/
 │   ├── sample-brd.md                # Realistic BRD input
 │   ├── sample-engineering-plan.md   # Full generated plan output
 │   └── sample-task-breakdown.md     # Task breakdown by engineering domain
 ├── demo/
 │   ├── mock_agent_runner.py         # Simulated 7-agent pipeline (no real prompts)
-│   └── sanitized_example.py        # End-to-end CLI walkthrough
+│   ├── requirements.txt             # Demo python dependencies
+│   └── sanitized_example.py         # End-to-end CLI walkthrough
 └── LICENSE
 ```
 
@@ -203,19 +208,11 @@ LangGraph · GPT-4o · GPT-4o-mini · Pinecone · LangSmith · FastAPI · Stream
 
 ## Note on Completeness
 
-This is a only **demo repo**. The full system — Agent prompts, LangGraph orchestration, RAG ingestion pipeline, Critic revision logic, evaluation framework, and all integration code is in a private repository.
+This is a **demo repository**. The core implementation—including detailed prompts, orchestrator graphs, RAG ingestion scripts, and integration logic—resides in a private repository to protect intellectual property.
 
-This repo is designed to give EM, TPMs and engineers a clear picture of system design, output quality, and engineering judgment. The implementation is protected.
+🔒 **Private Repository:** [github.com/rahulganbote/engineering-plan-agent](https://github.com/rahulganbote/engineering-plan-agent)
 
-🔒 **Private Repo:** [github.com/rahulganbote/engineering-plan-agent](https://github.com/rahulganbote/engineering-plan-agent)
-
-If you want to discuss the full system in a technical interview, I'm happy to walk through it.
-
----
-
-## Pending Work and Future Enhancements
-- Multi-Model system and output
-- TBD
+This demo is designed to illustrate system architecture, output quality, and engineering design. I am happy to walk through the implementation details one-on-one.
 
 ---
 
