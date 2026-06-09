@@ -2,9 +2,9 @@
 
 Architecture and flow diagrams for EM Copilot.
 
-## architecture_hub_spoke_v3.svg — LangGraph Pipeline (Hub-and-Spoke)
+## LangGraph Pipeline Flow Diagram
 
-![EM Copilot LangGraph Pipeline](architecture_hub_spoke.png)
+![EM Copilot LangGraph Pipeline](langgraph_pipeline_flow.png)
 
 This is the actual architecture diagram showing:
 - **Deterministic Security Layer** — 7 checks before any LLM node runs
@@ -21,45 +21,47 @@ This is the actual architecture diagram showing:
 Node names shown (`node_orchestrator_hub`, `node_dispatch_specialists`, etc.) are the LangGraph graph node identifiers — these reflect the pipeline structure but do not include prompts or orchestration logic.
 
 ---
+## Architectural Overview
 
-## high-level-architecture.png — Mermaid source
-
-```mermaid
-flowchart TD
-    A[BRD Upload\nStreamlit UI] --> SEC
-
-    subgraph SEC [Security Layer — 7 checks]
-        S1[Format] --> S2[Size] --> S3[Words] --> S4[Regex Inject]
-        S4 --> S5[LLM Inject] --> S6[PII Redact] --> S7[Completeness]
-    end
-
-    SEC --> ORCH[Orchestrator Agent\ngpt-4o-mini]
-
-    ORCH --> PX
-
-    subgraph PX [Parallel Dispatch — ThreadPoolExecutor]
-        PG[Plan Generator\ngpt-4o + RAG]
-        SE[Schedule Estimator\ngpt-4o + RAG]
-        SA[Solution Architect\ngpt-4o + RAG + Kroki]
-        PP[PoC Planner\ngpt-4o + RAG]
-        TS[Tech Stack\ngpt-4o + RAG]
-    end
-
-    PX --> CR[Critic Agent\ngpt-4o-mini\nLLM-as-Judge + FM-1/2/3]
-    CR -->|score < threshold\nrevision_count < 2| PX
-    CR -->|proceed| HITL[HITL Approval Gate\nUI or ElevenLabs Voice]
-
-    HITL -->|Approved| OUT
-
-    subgraph OUT [Downstream Integrations]
-        D1[Google Sheets\naudit row]
-        D2[Jira Epic\nMCP → REST fallback]
-        D3[Pinecone\nBRD ingestion]
-        D4[PDF Export\nReportLab]
-    end
+```
+                         ┌─────────────────────────────────────────────────┐
+                         │         SECURITY VALIDATION LAYER               │
+BRD Upload ──► FastAP ──►│  File check → Parse → Injection Guard (regex)   │
+(Streamlit)     POST     │  → Injection Guard (LLM) → PII Redact → BRD ✓   │
+            run-pipeline └─────────────────────────────────────────────────┘
+                                              │ validated BRD text
+                                              ▼
+                                    Orchestrator Agent
+                                    (hub — parses, routes sections)
+                                              │
+                                              ▼
+            ┌─────────────────────────────────────────────────────────────────────────┐
+            │ ThreadPoolExecutor │ (parallel dispatch) │             │                │
+            ▼                    ▼                     ▼             ▼                ▼
+    Plan Generator    Schedule Estimator  Solution Architect  PoC Planner  Tech Stack Recommender
+    (RAG + Reflect)   (RAG + Timelines)   (RAG + Diagram)   (RAG + Timelines) (RAG + Org Stds)
+            │                     │    (Mermaid+Kroki) │                 │           │ 
+            ▼                     ▼                    ▼                 ▼           ▼ 
+            └─────────────────────└────────────────────────┘─────────────────└───────────┘
+                                    │                       
+                                    ▼       ◄──── all 5 outputs together  
+                             Critic Agent  
+                            (LLM-as-judge + FM-1/2/3 caps)
+                                    │
+                     ┌──────────────┴───────────────┐
+                     │  score < threshold?          │
+                     │  revision_count < 2?         │
+                     ▼ yes                          ▼ no
+              ↻ Targeted revision           HITL Approval Gate
+              (only flagged Agents)         (Button OR Voice via ElevenLabs)
+                                                    │
+                        ┌───────────────────────────┼───────────────────────────┐
+                        │                           │                           │
+                        ▼ Approved                  ▼ Rejected                  ▼
+          Sheets + Jira Epic (MCP) + Pinecone   Sheets audit row only              (wait)
 ```
 
-## multi-agent-flow.png
+## Multi Agent Flow — Mermaid source
 
 ```mermaid
 sequenceDiagram

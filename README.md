@@ -9,7 +9,7 @@
 [![ElevenLabs](https://img.shields.io/badge/Voice%20HITL-ElevenLabs-1F1F1F)](https://elevenlabs.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> A demo of **EM Copilot**: a production-grade, 7-agent LangGraph system, grounded with RAG, that transforms a raw Business Requirements Document (BRD) into a draft engineering package: structured plan, project schedule, architecture diagram, PoC definition, and tech stack options. Outputs are evaluated by a Critic Agent, downloadable as PDF, reviewed via a Human-in-the-Loop (HITL) gate supporting voice commands, and deployed to Jira Cloud, Google Sheets dashboards, and Slack alerts.
+> A demo of **EM Copilot**: a production-grade, 7 AI Agent LangGraph system, grounded with RAG, that transforms a raw Business Requirements Document (BRD) into a draft engineering package: structured plan, project schedule, architecture diagram, PoC definition, and tech stack options. Outputs are evaluated by a Critic Agent, downloadable as PDF, reviewed via a Human-in-the-Loop (HITL) gate supporting voice commands, and deployed to Jira Cloud, Google Sheets dashboards, and Slack alerts.
 
 🔗 **Live Demo:** [huggingface.co/spaces/rganbote/em-copilot](https://huggingface.co/spaces/rganbote/em-copilot)  
 
@@ -26,7 +26,7 @@ Engineering Managers face a persistent bottleneck translating complex BRDs into 
 
 ## The Solution
 
-EM Copilot ingests a raw BRD and produces a complete, audit-ready engineering bundle in under ~60 seconds. The system combines RAG-grounded specialist agents with a self-correcting Critic loop and human approval gate, so outputs carry a clear Green / Amber / Red quality badge before anything reaches Jira or Google Sheets.
+EM Copilot ingests a raw BRD and produces a complete, audit-ready engineering bundle in under ~60 seconds, reducing the administrative timeline for kickoffs significantly (~25%-50%). The system combines RAG-grounded specialist Agents with a self-correcting Critic loop and human approval gate, so outputs carry a clear Green / Amber / Red quality badge before anything reaches Jira or Google Sheets.
 
 ---
 
@@ -49,23 +49,23 @@ EM Copilot ingests a raw BRD and produces a complete, audit-ready engineering bu
 
 Building a production-grade Multi-Agent system surfaces problems that PoC demos may not.
 
-**1. Data strategy & Golden datasets**: Designing agent contracts required thorough analysis of schemas and data consumers. Output quality is only as good as the Golden dataset. Lesson: Create domain-specific, org-standard data; define Pydantic models for BRD structures at the org level; and maintain active versioning of Golden datasets.
+**1. Data strategy & Golden datasets**: Requires thorough analysis of schemas and data consumed. Output quality is only as good as the Golden dataset. Lesson: Defining Pydantic structures at the org level prevents schema drift as requirements evolve. Maintain versioning of Golden datasets.
 
-**2. Modular vs. Functional design**: Extensibility is easily missed. Mid-project refactoring is expensive. Lesson: Explicitly provide the AI with the overall architectural vision and extensibility requirements for future extensions, not just the task spec.
+**2. Modular vs. Functional design**: Extensibility is easily missed. Mid-project refactoring is expensive. Lesson: Explicitly provide the "Big Picture" in the BRD and future roadmap if possible, not just the task spec.
 
 **3. Reliable AI**: Fewer bells and whistles and more reliable execution leads to higher adoption. Lesson: Cutting scope to harden the Critic, evaluation methods, and the security layer produced a far more reliable system.
 
-**4. Guardrails**: LLM judges are optimistic by default. Autonomous components need deterministic guardrails wrapped *around* them, not embedded *inside* them. Lesson: Wrapped the LLM judge in deterministic evaluation rules (such as BERTScore).
+**4. Eval Framework**: LLM judges are optimistic by default. Autonomous components need guardrails wrapped *around* them, not embedded *inside* them. Lesson: Wrapped the Critic with 4 deterministic rules (e.g. BERTScore).
 
-**5. Safety & Security**: LLMs are susceptible to prompt injection and compliance issues. Asking agents to "cite sources" for grounding is not enough. Lesson: The Critic must verify that citations map back to real vector chunk keys.
+**5. Guardrails & Security**: LLMs are susceptible to prompt injection and compliance issues. Asking agents to "cite sources" for grounding is not enough. Lesson: The Critic must verify that citations map back to real vector chunk keys.
 
-**6. Responsible AI**: Autonomous agents require a mindset shift. Hallucination detection requires active enforcement. Lesson: Nothing exports without a Human-in-the-Loop approval gate; Jira tickets are created only upon explicit human approval.
+**6. Responsible AI**: Autonomous Agents require a mindset shift. Hallucination detection requires active enforcement. Lesson: Nothing exports without a Human-in-the-Loop approval gate; Jira tickets are created only upon explicit human approval.
 
-**7. Observability from Day 1**: Silent failures are common in production agent systems. Lesson: Telemetry like LangSmith is mandatory from the beginning. You cannot debug or fix what you cannot trace.
+**7. Observability from Day 1**: Silent failures are common in production Agent systems. Lesson: Telemetry like LangSmith is mandatory from the beginning. You cannot debug or fix what you cannot trace.
 
 **8. Cost & Token usage**: Full-scale LangSmith monitoring is expensive. Lesson: A production architecture should sample traces for new releases or red-flagged runs, while letting local structured JSONL logs handle routine telemetry.
 
-**9. Latency is a Product problem**: A 50-second wait time is fast for complex generation, but users expect immediate feedback. Lesson: Parallel dispatch via `ThreadPoolExecutor` yielded the biggest performance improvement (3× speedup).
+**9. Latency is a Product problem, not only an engineering one**: A 50-second wait time is fast for complex generation, but users expect immediate feedback. Lesson: Parallel dispatch yielded the biggest latency improvement (3× speedup). Optimize the orchestration and workflow.
 
 **10. Conversational AI & HITL**: Getting voice assistants to interpret complex artifact summaries requires highly structured prompt context. Lesson: Budget extra development cycles for integrating voice-based human feedback.
 
@@ -87,7 +87,7 @@ Building a production-grade Multi-Agent system surfaces problems that PoC demos 
 
 ## System Architecture
 
-![EM Copilot LangGraph Pipeline](diagrams/architecture_hub_spoke.png)
+![EM Copilot LangGraph Pipeline](diagrams/langgraph_pipeline_flow.png)
 
 The diagram shows the full LangGraph hub-and-spoke pipeline: security layer → orchestrator hub → threaded fan-out to 5 parallel specialist agents → Pydantic fan-in → Critic (LLM-judge + FM caps) → decision router → HITL gate → downstream integrations. See [diagrams/README.md](diagrams/README.md) for node-by-node annotation.
 
@@ -163,7 +163,7 @@ engineering-plan-agent-demo/
 │   └── security-and-sanitization.md # What's protected and why
 ├── diagrams/
 │   ├── README.md                    # Mermaid source for diagrams
-│   └── architecture_hub_spoke.png   # Full system architecture diagram
+│   └── langgraph_pipeline_flow.png   # LangGraph pipeline flow diagram
 ├── screenshots/
 │   ├── README.md                    # Detailed annotations for screenshots
 │   ├── 01-streamlit-pipeline-green.png
@@ -217,7 +217,7 @@ This demo is designed to illustrate system architecture, output quality, and eng
 ---
 
 ## 📜 License
-MIT License - Feel free to use this project for learning and inspiration only.
+MIT License - Feel free to use this project for learning and inspiration.
 
 ---
 
