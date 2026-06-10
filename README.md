@@ -9,9 +9,12 @@
 [![ElevenLabs](https://img.shields.io/badge/Voice%20HITL-ElevenLabs-1F1F1F)](https://elevenlabs.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> A demo of **EM Copilot**: a production-grade, 7 AI Agent LangGraph system, grounded with RAG, that transforms a raw Business Requirements Document (BRD) into a draft engineering package: structured plan, project schedule, architecture diagram, PoC definition, and tech stack options. Outputs are evaluated by a Critic Agent, downloadable as PDF, reviewed via a Human-in-the-Loop (HITL) gate supporting voice commands, and deployed to Jira Cloud, Google Sheets dashboards, and Slack alerts.
+> A demo of **EM Copilot**: a Multi-Agent AI system, orchestrated with LangGraph and grounded with RAG, that transforms a raw Business Requirements Document (BRD) into a draft engineering package: structured plan, project schedule, architecture diagram, PoC definition, and tech stack options. Outputs are evaluated by a Critic Agent, downloadable as PDF, reviewed via a Human-in-the-Loop (HITL) gate supporting Voice commands, and deployed to Jira Cloud, Google Sheets dashboards, and Slack alerts.
 
 🔗 **Live Demo:** [huggingface.co/spaces/rganbote/em-copilot](https://huggingface.co/spaces/rganbote/em-copilot)  
+
+> [!NOTE]
+> **Mock vs. Production Code:** This repository showcases the architectural design, schema structures, and data flows using a structural mock pipeline (`demo/mock_agent_runner.py`). No API keys or external credentials are required to run this demo locally. The full production implementation (including prompts, active LangGraph orchestration, live Pinecone RAG, and service integrations) is hosted in a private repository to protect intellectual property.
 
 ---
 
@@ -20,22 +23,22 @@
 1. [Business Use Case & Solution](#business-use-case--solution)
    * [The Challenge](#the-challenge)
    * [The EM Copilot Solution](#the-em-copilot-solution)
-2. [Architectural Overview](#architectural-overview)
-3. [System Design & Core Pillars](#system-design--core-pillars)
+2. [What This Demo Repository Shows](#what-this-demo-repository-shows)
+3. [Architectural Overview](#architectural-overview)
+4. [System Design & Core Pillars](#system-design--core-pillars)
    * [Core Capabilities](#core-capabilities)
    * [Agent Inventory](#agent-inventory)
-4. [Tech Stack Justification](#tech-stack-justification)
-5. [Token Usage & Execution Cost](#token-usage--execution-cost)
-6. [Evaluation Framework](#evaluation-framework)
+5. [Tech Stack Justification](#tech-stack-justification)
+6. [Token Usage & Execution Cost](#token-usage--execution-cost)
+7. [Evaluation Framework](#evaluation-framework)
    * [Evaluation Results (v0 → v1)](#evaluation-results-v0--v1)
-7. [Screenshots of Demo](#screenshots-of-demo)
-8. [Project Directory Structure](#project-directory-structure)
-9. [Quick Start Guide](#quick-start-guide)
-10. [Note on Completeness](#note-on-completeness)
-11. [Challenges & Lessons Learned](#challenges--lessons-learned)
-12. [What This Demo Shows](#what-this-demo-shows)
-13. [License](#-license)
-14. [Author](#-author)
+8. [Screenshots of Demo](#screenshots-of-demo)
+9. [Challenges & Lessons Learned](#challenges--lessons-learned)
+10. [Project Directory Structure](#project-directory-structure)
+11. [Quick Start Guide](#quick-start-guide)
+12. [Note on Completeness](#note-on-completeness)
+13. [License](#license)
+14. [Author](#author)
 
 ---
 
@@ -56,13 +59,28 @@ EM Copilot ingests a raw BRD and produces a complete, audit-ready engineering bu
 
 ---
 
+## What This Demo Repository Shows
+
+| Area | What You Can See |
+|---|---|
+| System Architecture | 7-agent design, parallel dispatch, Critic loop, HITL gate |
+| Security Pipeline | 7-check deterministic validation layer before any LLM call |
+| Agent Roles | Each agent's responsibility, input/output contract, design pattern |
+| Evaluation Framework | 5-method eval with v0→v1 benchmark improvement data |
+| Sample Input/Output | Realistic BRD → full engineering plan + task breakdown |
+| Mock Demo Code | Pipeline structure and data contracts without real prompts |
+| Demo Screenshots | Streamlit UI and LangSmith telemetry traces |
+| Cost Analysis | Token breakdown and cost per pipeline run (~$0.31/run) |
+
+---
+
 ## Architectural Overview
 
 
 ```
                          ┌─────────────────────────────────────────────────┐
                          │         SECURITY VALIDATION LAYER               │
-BRD Upload ──► FastAP ──►│  File check → Parse → Injection Guard (regex)   │
+BRD Upload ──► FastAPI──►│  File check → Parse → Injection Guard (regex)   │
 (Streamlit)     POST     │  → Injection Guard (LLM) → PII Redact → BRD ✓   │
             run-pipeline └─────────────────────────────────────────────────┘
                                               │ validated BRD text
@@ -184,6 +202,27 @@ The diagram shows the full LangGraph hub-and-spoke pipeline: security layer → 
 See [screenshots/README.md](screenshots/README.md) from sample run.
 
 ---
+## Challenges & Lessons Learned
+
+Building a production-grade Multi-Agent system surfaces problems that simple PoC demos may not. Below are the key lessons grouped by engineering focus:
+
+### System Reliability, Security & Observability
+* **Reliable AI over complexity:** Fewer bells and whistles and more reliable execution leads to higher adoption. Hardening the Critic, evaluation methods, and the security layer produced a far more reliable system.
+* **Guardrails & compliance:** LLMs are susceptible to prompt injection. Asking agents to "cite sources" for grounding is not enough; the Critic must actively verify that citations map back to real vector chunk keys.
+* **Telemetry from Day 1:** Silent failures are common in production Agent systems. Telemetry like LangSmith is mandatory from the beginning because you cannot debug or fix what you cannot trace.
+* **Cost & token governance:** Full-scale LangSmith monitoring is expensive. A production architecture should sample traces for new releases or red-flagged runs, while letting local structured JSONL logs handle routine telemetry.
+
+### Data Strategy & Evaluation Frameworks
+* **Data strategy & Golden datasets:** Requires thorough analysis of schemas and data consumed. Output quality is only as good as the Golden dataset. Defining Pydantic structures at the org level prevents schema drift, and golden datasets must be version-controlled.
+* **Overcoming optimistic LLM-as-Judge behavior:** LLM judges are optimistic by default. Autonomous components need guardrails wrapped *around* them, not embedded *inside* them (e.g., wrapping the Critic with deterministic rules like BERTScore).
+* **Responsible AI & HITL:** Autonomous agents require a mindset shift. Hallucination detection requires active enforcement—nothing exports without a Human-in-the-Loop approval gate (e.g., Jira tickets are created only upon explicit human approval).
+
+### Architecture, Latency & Product Design
+* **Modular vs. functional design:** Extensibility is easily missed, and mid-project refactoring is expensive. Explicitly provide the "Big Picture" in the BRD and future roadmap, not just the task spec.
+* **Latency is a product experience:** A 50-second wait time is fast for complex generation, but users expect immediate feedback. Parallel dispatch yielded the biggest latency improvement (3× speedup) through orchestration optimization.
+* **Conversational AI & HITL complexity:** Getting voice assistants to interpret complex artifact summaries requires highly structured prompt context. Budget extra development cycles for integrating voice-based human feedback.
+
+---
 
 ## Project Directory Structure
 
@@ -246,52 +285,12 @@ This demo is designed to illustrate system architecture, output quality, and eng
 
 ---
 
-## Challenges & Lessons Learned
-
-Building a production-grade Multi-Agent system surfaces problems that PoC demos may not.
-
-**1. Data strategy & Golden datasets**: Requires thorough analysis of schemas and data consumed. Output quality is only as good as the Golden dataset. Lesson: Defining Pydantic structures at the org level prevents schema drift as requirements evolve. Maintain versioning of Golden datasets.
-
-**2. Modular vs. Functional design**: Extensibility is easily missed. Mid-project refactoring is expensive. Lesson: Explicitly provide the "Big Picture" in the BRD and future roadmap if possible, not just the task spec.
-
-**3. Reliable AI**: Fewer bells and whistles and more reliable execution leads to higher adoption. Lesson: Cutting scope to harden the Critic, evaluation methods, and the security layer produced a far more reliable system.
-
-**4. Eval Framework**: LLM judges are optimistic by default. Autonomous components need guardrails wrapped *around* them, not embedded *inside* them. Lesson: Wrapped the Critic with 4 deterministic rules (e.g. BERTScore).
-
-**5. Guardrails & Security**: LLMs are susceptible to prompt injection and compliance issues. Asking agents to "cite sources" for grounding is not enough. Lesson: The Critic must verify that citations map back to real vector chunk keys.
-
-**6. Responsible AI**: Autonomous Agents require a mindset shift. Hallucination detection requires active enforcement. Lesson: Nothing exports without a Human-in-the-Loop approval gate; Jira tickets are created only upon explicit human approval.
-
-**7. Observability from Day 1**: Silent failures are common in production Agent systems. Lesson: Telemetry like LangSmith is mandatory from the beginning. You cannot debug or fix what you cannot trace.
-
-**8. Cost & Token usage**: Full-scale LangSmith monitoring is expensive. Lesson: A production architecture should sample traces for new releases or red-flagged runs, while letting local structured JSONL logs handle routine telemetry.
-
-**9. Latency is a Product problem, not only an engineering one**: A 50-second wait time is fast for complex generation, but users expect immediate feedback. Lesson: Parallel dispatch yielded the biggest latency improvement (3× speedup). Optimize the orchestration and workflow.
-
-**10. Conversational AI & HITL**: Getting voice assistants to interpret complex artifact summaries requires highly structured prompt context. Lesson: Budget extra development cycles for integrating voice-based human feedback.
-
----
-
-## What This Demo Shows
-
-| Area | What You Can See |
-|---|---|
-| System Architecture | 7-agent design, parallel dispatch, Critic loop, HITL gate |
-| Security Pipeline | 7-check deterministic validation layer before any LLM call |
-| Agent Roles | Each agent's responsibility, input/output contract, design pattern |
-| Evaluation Framework | 5-method eval with v0→v1 benchmark improvement data |
-| Sample Input/Output | Realistic BRD → full engineering plan + task breakdown |
-| Mock Demo Code | Pipeline structure and data contracts without real prompts |
-| Cost Analysis | Token breakdown and cost per pipeline run (~$0.31/run) |
-
----
-
-## 📜 License
+## License
 MIT License - Feel free to use this project for learning and inspiration.
 
 ---
 
-## 🧑‍💻 Author
+## Author
 
 **Rahul Ganbote** — [LinkedIn](https://www.linkedin.com/in/rahul-ganbote-040a7b/) · [GitHub @rahulganbote](https://github.com/rahulganbote)
 
