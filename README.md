@@ -15,7 +15,33 @@
 
 ---
 
-## The Problem
+## Table of Contents
+
+1. [Business Use Case & Solution](#business-use-case--solution)
+   * [The Challenge](#the-challenge)
+   * [The EM Copilot Solution](#the-em-copilot-solution)
+2. [Architectural Overview](#architectural-overview)
+3. [System Design & Core Pillars](#system-design--core-pillars)
+   * [Core Capabilities](#core-capabilities)
+   * [Agent Inventory](#agent-inventory)
+4. [Tech Stack Justification](#tech-stack-justification)
+5. [Token Usage & Execution Cost](#token-usage--execution-cost)
+6. [Evaluation Framework](#evaluation-framework)
+   * [Evaluation Results (v0 → v1)](#evaluation-results-v0--v1)
+7. [Screenshots of Demo](#screenshots-of-demo)
+8. [Project Directory Structure](#project-directory-structure)
+9. [Quick Start Guide](#quick-start-guide)
+10. [Note on Completeness](#note-on-completeness)
+11. [Challenges & Lessons Learned](#challenges--lessons-learned)
+12. [What This Demo Shows](#what-this-demo-shows)
+13. [License](#-license)
+14. [Author](#-author)
+
+---
+
+## Business Use Case & Solution
+
+### The Challenge
 
 Engineering Managers face a persistent bottleneck translating complex BRDs into structured technical plans, schedules, and architecture diagrams. This manual process is time-consuming and produces inconsistent results:
 
@@ -24,13 +50,63 @@ Engineering Managers face a persistent bottleneck translating complex BRDs into 
 - **Inconsistent scoping**: Ad-hoc architectures and planning criteria varying across squads
 - **Org-specific tech stacks**: Evaluating technology stacks relative to what is supported and allowed vs unsupported at the organizational level
 
-## The Solution
+### The EM Copilot Solution
 
 EM Copilot ingests a raw BRD and produces a complete, audit-ready engineering bundle in under ~60 seconds, reducing the administrative timeline for kickoffs significantly (~25%-50%). The system combines RAG-grounded specialist Agents with a self-correcting Critic loop and human approval gate, so outputs carry a clear Green / Amber / Red quality badge before anything reaches Jira or Google Sheets.
 
 ---
 
-## Engineering Highlights
+## Architectural Overview
+
+
+```
+                         ┌─────────────────────────────────────────────────┐
+                         │         SECURITY VALIDATION LAYER               │
+BRD Upload ──► FastAP ──►│  File check → Parse → Injection Guard (regex)   │
+(Streamlit)     POST     │  → Injection Guard (LLM) → PII Redact → BRD ✓   │
+            run-pipeline └─────────────────────────────────────────────────┘
+                                              │ validated BRD text
+                                              ▼
+                                    Orchestrator Agent
+                                    (hub — parses, routes sections)
+                                              │
+                                              ▼
+            ┌─────────────────────────────────────────────────────────────────────────┐
+            │ ThreadPoolExecutor │ (parallel dispatch) │             │                │
+            ▼                    ▼                     ▼             ▼                ▼
+    Plan Generator    Schedule Estimator  Solution Architect  PoC Planner  Tech Stack Recommender
+    (RAG + Reflect)   (RAG + Timelines)   (RAG + Diagram)   (RAG + Timelines) (RAG + Org Stds)
+            │                     │    (Mermaid+Kroki) │                 │           │ 
+            ▼                     ▼                    ▼                 ▼           ▼ 
+            └─────────────────────└────────────────────────┘─────────────────└───────────┘
+                                    │                       
+                                    ▼       ◄──── all 5 outputs together  
+                             Critic Agent  
+                            (LLM-as-judge + FM-1/2/3 caps)
+                                    │
+                     ┌──────────────┴───────────────┐
+                     │  score < threshold?          │
+                     │  revision_count < 2?         │
+                     ▼ yes                          ▼ no
+              ↻ Targeted revision           HITL Approval Gate
+              (only flagged Agents)         (Button OR Voice via ElevenLabs)
+                                                    │
+                        ┌───────────────────────────┼───────────────────────────┐
+                        │                           │                           │
+                        ▼ Approved                  ▼ Rejected                  ▼
+          Sheets + Jira Epic (MCP) + Pinecone   Sheets audit row only              (wait)
+```
+<!--
+![EM Copilot LangGraph Pipeline](diagrams/langgraph_pipeline_flow.png)
+-->
+See [diagrams/README.md](diagrams/README.md) for node-by-node annotation.
+The diagram shows the full LangGraph hub-and-spoke pipeline: security layer → orchestrator hub → threaded fan-out to 5 parallel specialist agents → Pydantic fan-in → Critic (LLM-judge + FM caps) → decision router → HITL gate → downstream integrations. 
+
+---
+
+## System Design & Core Pillars
+
+### Core Capabilities
 
 - **7-agent LangGraph pipeline**: Hybrid Hub-and-Spoke design pattern. Parallel dispatch to specialist agents is ~3× faster than sequential chaining (~50s vs >2.5 minutes).
 - **Pydantic-enforced output contracts**: Clean execution at every agent boundary with zero untyped LLM handoffs.
@@ -42,6 +118,131 @@ EM Copilot ingests a raw BRD and produces a complete, audit-ready engineering bu
 - **Jira Epic via MCP**: Uses the `mcp-atlassian` MCP server (stdio transport) with automatic fallback to REST API; constructs descriptions in Atlassian Document Format (ADF).
 - **5-method evaluation framework**: Rule-based, LLM-as-Judge, execution/schema validation, BERTScore semantic diffs, and Human HITL ratings.
 - **LangSmith full-trace observability**: Every model call, token count, prompt structure, and latency captured.
+
+### Agent Inventory
+
+| Agent | Model | Role | Pattern |
+|---|---|---|---|
+| **Orchestrator** | GPT-4o-mini | Parses BRD sections, routes to specialists | Hub-and-spoke dispatcher |
+| **Plan Generator** | GPT-4o | Creates phased engineering plan with milestones | RAG + Reflection |
+| **Schedule Estimator** | GPT-4o | Estimates effort, sprint timeline, dependencies | RAG + Timeline modeling |
+| **Solution Architect** | GPT-4o | Generates Mermaid diagram rendered via Kroki | RAG + Diagram synthesis |
+| **PoC Planner** | GPT-4o | Defines proof-of-concept scope and success metrics | RAG + Scoping |
+| **Tech Stack Recommender** | GPT-4o | Evaluates technology options against org standards | RAG + Org standards |
+| **Critic Agent** | GPT-4o-mini | Quality auditing, revision loop control, Rule-based + BERTScore | LLM-as-Judge |
+
+---
+
+## Tech Stack Justification
+
+| Category | Technology | Engineering Reason |
+|---|---|---|
+| **Agent State** | LangGraph v0.2.28 | State Graph model with native routing, cycle tracking, and async interrupts |
+| **Vector DB** | Pinecone Serverless | Fully managed index with fast cosine-similarity search over technical standards |
+| **Embeddings** | `text-embedding-3-large` (1024) | High dimensionality with customized text projection for dense architectural guides |
+| **Models** | GPT-4o (specialists) + GPT-4o-mini (critic) | Balance between specialist reasoning quality and critic execution cost |
+| **Web Server** | FastAPI | Async endpoints, Server-Sent Events (SSE) for UI streaming, and non-blocking exports |
+| **Frontend UI** | Streamlit | Rapid UI prototyping displaying real-time execution graphs and progress logs |
+| **Voice Interface** | ElevenLabs Conversational AI | Webhook integration executing natural language HITL discussion & approvals |
+| **Tool Integration** | Model Context Protocol (MCP) | Standardized Agent-to-Tool transport; the Jira Epic push runs through an `mcp-atlassian` server spawned over stdio |
+| **Resilience Primitives** | Custom `src/core/resilience.py` (mirrors Hystrix / Polly / resilience4j) | Small surface area, no external dependency; per-instance state with frozen `CallPolicy` |
+| **Cache Backends** | `InMemoryCache` / `RedisCache` / `TieredCache` / `SemanticBackend` (Pinecone) | Pluggable `CacheBackend` Protocol — chosen at runtime via `init_default_backend_from_env()` |
+| **Event Bus** | Lightweight `src/core/events.py` emitter | Best-effort event fan-out for `cache_hit`, `cache_miss`, `retry`, `breaker_open`, `bulkhead_timeout`; surfaced into Streamlit SSE stream |
+
+---
+
+## Token Usage & Execution Cost
+
+| Agent | Model | Est. Cost |
+|---|---|---|
+| Security + Orchestrator + Critic | gpt-4o-mini | ~$0.003 |
+| Plan Generator | gpt-4o | ~$0.063 |
+| Schedule Estimator | gpt-4o | ~$0.043 |
+| Solution Architect | gpt-4o | ~$0.075 |
+| PoC Planner | gpt-4o | ~$0.043 |
+| Tech Stack Recommender | gpt-4o | ~$0.043 |
+| **Total per run** | | **~$0.31** |
+
+---
+
+## Evaluation Framework
+
+### Evaluation Results (v0 → v1)
+
+| Dimension | v0 (Initial) | v1 (Post-Critic) | Delta |
+|---|---|---|---|
+| Groundedness | 2.40 | 3.90 | +1.50 |
+| Completeness | 3.80 | 4.80 | +1.00 |
+| Consistency | 4.10 | 4.60 | +0.50 |
+| Actionability | 3.20 | 4.00 | +0.80 |
+| **Overall** | **3.38 / 5.00 🟡** | **4.33 / 5.00 🟢** | **+0.95** |
+
+---
+
+## Screenshots of Demo
+
+See [screenshots/README.md](screenshots/README.md) from sample run.
+
+---
+
+## Project Directory Structure
+
+To navigate this public demo repository, here is the layout of the system design documents, sample outputs, and simulated execution scripts:
+
+```
+engineering-plan-agent-demo/
+├── README.md
+├── docs/
+│   ├── architecture.md              # 7-agent system design and patterns
+│   ├── system-flow.md               # Step-by-step pipeline walkthrough
+│   ├── agent-roles.md               # Agent responsibilities and contracts
+│   └── security-and-sanitization.md # What's protected and why
+├── diagrams/
+│   ├── README.md                    # Mermaid source for diagrams
+│   └── langgraph_pipeline_flow.png   # LangGraph pipeline flow diagram
+├── screenshots/
+│   ├── README.md                    # Detailed annotations for screenshots
+│   ├── 01-streamlit-pipeline-green.png
+│   ├── 02-streamlit-artifacts-architecture.png
+│   ├── 03-hitl-voice-elevenlabs.png
+│   ├── 04-langsmith-trace-nodes.png
+│   ├── 05-langsmith-tracing-list.png
+│   ├── 06-langsmith-monitoring.png
+│   └── 07-langsmith-cost-tokens.png
+├── samples/
+│   ├── sample-brd.md                # Realistic BRD input
+│   ├── sample-engineering-plan.md   # Full generated plan output
+│   └── sample-task-breakdown.md     # Task breakdown by engineering domain
+├── demo/
+│   ├── mock_agent_runner.py         # Simulated 7-agent pipeline (no real prompts)
+│   ├── requirements.txt             # Demo python dependencies
+│   └── sanitized_example.py         # End-to-end CLI walkthrough
+└── LICENSE
+```
+
+---
+
+## Quick Start Guide
+
+```bash
+git clone https://github.com/rahulganbote/engineering-plan-agent-demo.git
+cd engineering-plan-agent-demo
+python demo/sanitized_example.py            # formatted output
+python demo/sanitized_example.py --verbose  # include task detail
+python demo/sanitized_example.py --json     # raw JSON output
+```
+
+No API keys required. The demo runs the pipeline structure over mock data.
+
+---
+
+## Note on Completeness
+
+This is a **demo repository**. The core implementation—including detailed prompts, orchestrator graphs, RAG ingestion scripts, and integration logic—resides in a private repository to protect intellectual property.
+
+🔒 **Private Repository:** [github.com/rahulganbote/engineering-plan-agent](https://github.com/rahulganbote/engineering-plan-agent)
+
+This demo is designed to illustrate system architecture, output quality, and engineering design. I am happy to walk through the implementation details one-on-one.
 
 ---
 
@@ -82,151 +283,6 @@ Building a production-grade Multi-Agent system surfaces problems that PoC demos 
 | Sample Input/Output | Realistic BRD → full engineering plan + task breakdown |
 | Mock Demo Code | Pipeline structure and data contracts without real prompts |
 | Cost Analysis | Token breakdown and cost per pipeline run (~$0.31/run) |
-
----
-
-## System Architecture
-
-![EM Copilot LangGraph Pipeline](diagrams/langgraph_pipeline_flow.png)
-
-The diagram shows the full LangGraph hub-and-spoke pipeline: security layer → orchestrator hub → threaded fan-out to 5 parallel specialist agents → Pydantic fan-in → Critic (LLM-judge + FM caps) → decision router → HITL gate → downstream integrations. See [diagrams/README.md](diagrams/README.md) for node-by-node annotation.
-
----
-
-## Screenshots
-
-| Streamlit UI — Pipeline Complete | HITL Voice Gate (ElevenLabs) |
-|---|---|
-| ![Pipeline green](screenshots/01-streamlit-pipeline-green.png) | ![Voice gate](screenshots/03-hitl-voice-elevenlabs.png) |
-
-| LangSmith Trace — Node Execution | Kroki-Rendered Architecture Diagram |
-|---|---|
-| ![LangSmith trace](screenshots/04-langsmith-trace-nodes.png) | ![Architecture artifact](screenshots/02-streamlit-artifacts-architecture.png) |
-
-| LangSmith Monitoring | LangSmith Cost & Tokens |
-|---|---|
-| ![Monitoring](screenshots/06-langsmith-monitoring.png) | ![Cost](screenshots/07-langsmith-cost-tokens.png) |
-
-See [screenshots/README.md](screenshots/README.md) for full annotations on each.
-
----
-
-## Agent Inventory
-
-| Agent | Model | Role | Pattern |
-|---|---|---|---|
-| **Orchestrator** | GPT-4o-mini | Parses BRD sections, routes to specialists | Hub-and-spoke dispatcher |
-| **Plan Generator** | GPT-4o | Creates phased engineering plan with milestones | RAG + Reflection |
-| **Schedule Estimator** | GPT-4o | Estimates effort, sprint timeline, dependencies | RAG + Timeline modeling |
-| **Solution Architect** | GPT-4o | Generates Mermaid diagram rendered via Kroki | RAG + Diagram synthesis |
-| **PoC Planner** | GPT-4o | Defines proof-of-concept scope and success metrics | RAG + Scoping |
-| **Tech Stack Recommender** | GPT-4o | Evaluates technology options against org standards | RAG + Org standards |
-| **Critic Agent** | GPT-4o-mini | Quality auditing, revision loop control, Rule-based + BERTScore | LLM-as-Judge |
-
----
-
-## Evaluation Results (v0 → v1)
-
-| Dimension | v0 (Initial) | v1 (Post-Critic) | Delta |
-|---|---|---|---|
-| Groundedness | 2.40 | 3.90 | +1.50 |
-| Completeness | 3.80 | 4.80 | +1.00 |
-| Consistency | 4.10 | 4.60 | +0.50 |
-| Actionability | 3.20 | 4.00 | +0.80 |
-| **Overall** | **3.38 / 5.00 🟡** | **4.33 / 5.00 🟢** | **+0.95** |
-
----
-
-## Cost Per Pipeline Run
-
-| Agent | Model | Est. Cost |
-|---|---|---|
-| Security + Orchestrator + Critic | gpt-4o-mini | ~$0.003 |
-| Plan Generator | gpt-4o | ~$0.063 |
-| Schedule Estimator | gpt-4o | ~$0.043 |
-| Solution Architect | gpt-4o | ~$0.075 |
-| PoC Planner | gpt-4o | ~$0.043 |
-| Tech Stack Recommender | gpt-4o | ~$0.043 |
-| **Total per run** | | **~$0.31** |
-
----
-
-## Tech Stack & Justifications
-
-| Category | Technology | Engineering Reason |
-|---|---|---|
-| **Agent State** | LangGraph v0.2.28 | State Graph model with native routing, cycle tracking, and async interrupts |
-| **Vector DB** | Pinecone Serverless | Fully managed index with fast cosine-similarity search over technical standards |
-| **Embeddings** | `text-embedding-3-large` (1024) | High dimensionality with customized text projection for dense architectural guides |
-| **Models** | GPT-4o (specialists) + GPT-4o-mini (critic) | Balance between specialist reasoning quality and critic execution cost |
-| **Web Server** | FastAPI | Async endpoints, Server-Sent Events (SSE) for UI streaming, and non-blocking exports |
-| **Frontend UI** | Streamlit | Rapid UI prototyping displaying real-time execution graphs and progress logs |
-| **Voice Interface** | ElevenLabs Conversational AI | Webhook integration executing natural language HITL discussion & approvals |
-| **Tool Integration** | Model Context Protocol (MCP) | Standardized Agent-to-Tool transport; the Jira Epic push runs through an `mcp-atlassian` server spawned over stdio |
-| **Resilience Primitives** | Custom `src/core/resilience.py` (mirrors Hystrix / Polly / resilience4j) | Small surface area, no external dependency; per-instance state with frozen `CallPolicy` |
-| **Cache Backends** | `InMemoryCache` / `RedisCache` / `TieredCache` / `SemanticBackend` (Pinecone) | Pluggable `CacheBackend` Protocol — chosen at runtime via `init_default_backend_from_env()` |
-| **Event Bus** | Lightweight `src/core/events.py` emitter | Best-effort event fan-out for `cache_hit`, `cache_miss`, `retry`, `breaker_open`, `bulkhead_timeout`; surfaced into Streamlit SSE stream |
-
----
-
-## Repo Structure
-
-To navigate this public demo repository, here is the layout of the system design documents, sample outputs, and simulated execution scripts:
-
-```
-engineering-plan-agent-demo/
-├── README.md
-├── docs/
-│   ├── architecture.md              # 7-agent system design and patterns
-│   ├── system-flow.md               # Step-by-step pipeline walkthrough
-│   ├── agent-roles.md               # Agent responsibilities and contracts
-│   └── security-and-sanitization.md # What's protected and why
-├── diagrams/
-│   ├── README.md                    # Mermaid source for diagrams
-│   └── langgraph_pipeline_flow.png   # LangGraph pipeline flow diagram
-├── screenshots/
-│   ├── README.md                    # Detailed annotations for screenshots
-│   ├── 01-streamlit-pipeline-green.png
-│   ├── 02-streamlit-artifacts-architecture.png
-│   ├── 03-hitl-voice-elevenlabs.png
-│   ├── 04-langsmith-trace-nodes.png
-│   ├── 05-langsmith-tracing-list.png
-│   ├── 06-langsmith-monitoring.png
-│   └── 07-langsmith-cost-tokens.png
-├── samples/
-│   ├── sample-brd.md                # Realistic BRD input
-│   ├── sample-engineering-plan.md   # Full generated plan output
-│   └── sample-task-breakdown.md     # Task breakdown by engineering domain
-├── demo/
-│   ├── mock_agent_runner.py         # Simulated 7-agent pipeline (no real prompts)
-│   ├── requirements.txt             # Demo python dependencies
-│   └── sanitized_example.py         # End-to-end CLI walkthrough
-└── LICENSE
-```
-
----
-
-## Quick Start — Run the Demo
-
-```bash
-git clone https://github.com/rahulganbote/engineering-plan-agent-demo.git
-cd engineering-plan-agent-demo
-python demo/sanitized_example.py            # formatted output
-python demo/sanitized_example.py --verbose  # include task detail
-python demo/sanitized_example.py --json     # raw JSON output
-```
-
-No API keys required. The demo runs the pipeline structure over mock data.
-
----
-
-## Note on Completeness
-
-This is a **demo repository**. The core implementation—including detailed prompts, orchestrator graphs, RAG ingestion scripts, and integration logic—resides in a private repository to protect intellectual property.
-
-🔒 **Private Repository:** [github.com/rahulganbote/engineering-plan-agent](https://github.com/rahulganbote/engineering-plan-agent)
-
-This demo is designed to illustrate system architecture, output quality, and engineering design. I am happy to walk through the implementation details one-on-one.
 
 ---
 
