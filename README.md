@@ -11,7 +11,7 @@
 
 > A demo of **EM Copilot**: a Multi-Agent AI system, orchestrated with LangGraph and grounded with RAG, that transforms a raw Business Requirements Document (BRD) into a draft engineering package: structured plan, project schedule, architecture diagram, PoC definition, and tech stack options. Outputs are evaluated by a Critic Agent, downloadable as PDF, reviewed via a Human-in-the-Loop (HITL) gate supporting Voice commands, and deployed to Jira Cloud, Google Sheets dashboards, and Slack alerts.
 
-🔗 **Live Demo:** [huggingface.co/spaces/rganbote/em-copilot](https://huggingface.co/spaces/rganbote/em-copilot)  
+🔗 **Live Demo:** [em-copilot on Google Cloud Run](https://em-copilot-1-809545615573.europe-west1.run.app/) · *Streamlit v1 deployed · React-UI v2 in-progress ([plan](./react_migration_plan.md))*
 
 > [!NOTE]
 > **Mock vs. Production Code:** This repository showcases the architectural design, schema structures, and data flows using a structural mock pipeline (`demo/mock_agent_runner.py`). No API keys or external credentials are required to run this demo locally. The full production implementation (including prompts, active LangGraph orchestration, live Pinecone RAG, and service integrations) is hosted in a private repository to protect intellectual property.
